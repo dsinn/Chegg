@@ -852,6 +852,8 @@ function piece:new()
         typeData.onSummon(self)
     end
 
+    self.renderPos = {unpack(self.pos)}
+
     local hasSS = typeData.soundSummon and typeData.soundSummon~=''
     sounds.play('woosh', hasSS and 0.35 or 1, 0.95+0.1*love.math.random())
     sounds.play(typeData.soundSummon, 1, 0.95+0.1*love.math.random())
@@ -927,6 +929,8 @@ function piece:getAttackDamage(targetX, targetY)
 end
 
 function piece:update(delta)
+    self.renderPos[1] = math.easeDecay(self.renderPos[1], self.pos[1], 20, delta)
+    self.renderPos[2] = math.easeDecay(self.renderPos[2], self.pos[2], 20, delta)
     if not self.dead then return end
     self.dead = self.dead+delta
     self.rotation = math.min(math.pi/2, self.dead*6)

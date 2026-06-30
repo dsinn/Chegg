@@ -243,8 +243,8 @@ function board:draw()
                     local piece = grid[i]
                     if piece.draw then
                         piece:draw(xPos, yPos,
-                            gridSize*self.scale*(x-0.5)+xPos,
-                            gridSize*self.scale*(y-0.5)+yPos
+                            gridSize*self.scale*(piece.renderPos[1]-0.5)+xPos,
+                            gridSize*self.scale*(piece.renderPos[2]-0.5)+yPos
                         )
                     end
                 end
