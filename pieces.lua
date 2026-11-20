@@ -467,8 +467,8 @@ local piecetypes; piecetypes = {
         quadU = genQuad(1, 9),
         image = spriteAtlas,
         canTravelTo = function(self, targetX, targetY)
-            local x, y = targetX%2, targetY%2
-            return x==y
+            local x, y = math.abs(self.pos[1]-targetX), math.abs(self.pos[2]-targetY)
+            return x<=2 and y<=2 and targetX%2==targetY%2
         end,
         attackAreaPreview = function(self, targetX, targetY)
             local coords = {}
@@ -551,7 +551,7 @@ local piecetypes; piecetypes = {
         image = spriteAtlas,
         canTravelTo = function(self, targetX, targetY)
             local x, y = math.abs(self.pos[1]-targetX), math.abs(self.pos[2]-targetY)
-            return (x+y==4 or x+y==2 and x~=y)
+            return (x==0 or x==2) and (y==0 or y==2)
         end,
         attackAreaPreview = function(self, targetX, targetY)
             return
@@ -624,8 +624,8 @@ local piecetypes; piecetypes = {
             if self.attackAs and self.attackMove and occupant then
                 return piecetypes[self.attackAs].canTravelTo(self, targetX, targetY)
             end
-            local xy = math.abs(self.pos[1]-targetX)+math.abs(self.pos[2]-targetY)
-            return (xy==4 or xy==2 or xy==1) and not occupant
+            local x, y = math.abs(self.pos[1]-targetX), math.abs(self.pos[2]-targetY)
+            return (x==0 or y==0 or x==y) and math.max(x, y)<=2 and not occupant
         end,
         canAttackTo = function(self, targetX, targetY)
             if not self.attackAs then
