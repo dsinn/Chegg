@@ -175,6 +175,34 @@ function sim.actions(board, player)
     return acts
 end
 
+-- The actions of `player`'s piece on square (x, y) that can take a piece,
+-- for the turn search's tactical extension (ai/turnsearch.lua): every
+-- attack, and moves onto an occupied square (a move to an empty square never
+-- takes anything). Classified as in sim.actions: a square the piece can
+-- travel to is a move, otherwise an attack if allowed.
+function sim.captureActions(board, player, x, y)
+    local acts = {}
+    if player.dead or not board:isActivePlayer(player) then return acts end
+    local pc = board:getLivingPieceAt(x, y)
+    if not pc or pc.player~=player or not (pc:canMove() or pc:canSpecial()) then return acts end
+    local cols, rows = board.cols, board.rows
+    local r = math.max(pc.moveRange or 0, pc.attackRange or 0)
+    for ty=math.max(1, y-r), math.min(rows, y+r) do
+        for tx=math.max(1, x-r), math.min(cols, x+r) do
+            if board:getLivingPieceAt(tx, ty) then
+                if pc:canTravelTo(tx, ty) then
+                    acts[#acts+1] = {k='move', fx=x, fy=y, x=tx, y=ty}
+                elseif pc:canAttackTo(tx, ty) then
+                    acts[#acts+1] = {k='attack', fx=x, fy=y, x=tx, y=ty}
+                end
+            elseif pc:canAttackTo(tx, ty) and not pc:canTravelTo(tx, ty) then
+                acts[#acts+1] = {k='attack', fx=x, fy=y, x=tx, y=ty}
+            end
+        end
+    end
+    return acts
+end
+
 -- Applies `action` for `player` through the normal game functions.
 -- Returns true if it was legal and happened.
 function sim.apply(board, player, action)

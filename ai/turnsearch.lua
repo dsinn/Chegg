@@ -49,7 +49,24 @@ end
 -- `scorer` below for ranking positions some other way.
 -- `scorer(board)` ranks positions (higher is kept); by default players[idx]'s
 -- own evaluation at the end of its turn.
-function turnsearch.search(root, idx, beam, depth, ctx, part, parts, scorer)
+-- With `tactical`, every move or attack is also tried with each follow-up
+-- by the same piece that takes a piece (sim.captureActions), and the pair
+-- joins the same beam step: a move that sets up a capture (step then shoot,
+-- a parrot copying a range before attacking) doesn't score better on its
+-- own, so a narrow beam would drop it before the capture could follow.
+-- Mirrors `search_turn_ext` in chegg-headless.
+local function aliveCount(p)
+    local n = 0
+    for _, pc in ipairs(p.summons) do
+        if pc:isAlive() then n = n+1 end
+    end
+    return n
+end
+
+-- With `noSummons`, summoning is left out, except a Wither (its summon
+-- explodes): for modelling the opponent's reply, where summons crowd the
+-- beam out of a second capture.
+function turnsearch.search(root, idx, beam, depth, ctx, part, parts, scorer, tactical, noSummons)
     scorer = scorer or function(b) return eval.score(b, b.players[idx], 'opp') end
     local rootNode = {
         board = root,
@@ -69,7 +86,7 @@ function turnsearch.search(root, idx, beam, depth, ctx, part, parts, scorer)
                 local before = turnsearch.key(b, idx)
                 local n = 0
                 for _, a in ipairs(sim.actions(b, p)) do
-                    if a.k~='end' then
+                    if a.k~='end' and not (noSummons and a.k=='summon' and a.card~='wither') then
                         n = n+1
                         if d>1 or not parts or (n-1)%parts==part-1 then
                             local c = sim.clone(b)
@@ -81,8 +98,35 @@ function turnsearch.search(root, idx, beam, depth, ctx, part, parts, scorer)
                                         board = c,
                                         seq = append(node.seq, a),
                                         keys = append(node.keys, before),
-                                        score = scorer(c),
                                     }
+                                    local ax, ay
+                                    if a.k=='move' then ax, ay = a.x, a.y
+                                    elseif a.k=='attack' then ax, ay = a.fx, a.fy end
+                                    if tactical and ax and not sim.isOver(c) and c:isActivePlayer(c.players[idx]) then
+                                        local victim = c:getOpponent(c.players[idx])
+                                        local victimIdx = sim.playerIndex(c, victim)
+                                        local victims = aliveCount(victim)
+                                        for _, f in ipairs(sim.captureActions(c, c.players[idx], ax, ay)) do
+                                            local cc = sim.clone(c)
+                                            if sim.apply(cc, cc.players[idx], f)
+                                                and (sim.isOver(cc) or aliveCount(cc.players[victimIdx])<victims) then
+                                                local key2 = turnsearch.key(cc, idx)
+                                                if not seen[key2] then
+                                                    seen[key2] = true
+                                                    local pair = {
+                                                        board = cc,
+                                                        seq = append(child.seq, f),
+                                                        keys = append(child.keys, key),
+                                                        score = scorer(cc),
+                                                    }
+                                                    all[#all+1] = pair
+                                                    nextFrontier[#nextFrontier+1] = pair
+                                                end
+                                            end
+                                            ctx.check()
+                                        end
+                                    end
+                                    child.score = scorer(c)
                                     all[#all+1] = child
                                     nextFrontier[#nextFrontier+1] = child
                                 end

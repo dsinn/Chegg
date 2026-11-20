@@ -97,7 +97,8 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
     local perPart = params.candidates*((params.spread or 0)>0 and 3 or 1)
     for part=1, parts do
         searches[part] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
-            beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts}
+            beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
+            tactical=params.ownTactical}
     end
     local found, seen = {}, {}
     for _, list in ipairs(pool.run(searches, ctx)) do
@@ -119,7 +120,8 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
         replies[i] = {kind='reply', snap=snap, detSeed=detSeed, me=idx, seq=c.seq,
             samples=params.samples, seed=rng:random(1, 1073741823),
             replyBeam=params.replyBeam, replyDepth=params.replyDepth, minimax=params.minimax,
-            guided=params.guided}
+            guided=params.guided, tactical=params.tactical,
+            replySummons=params.replySummons}
     end
     local best, bestScore
     for i, r in ipairs(pool.run(replies, ctx)) do

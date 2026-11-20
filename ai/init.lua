@@ -35,6 +35,14 @@ ai.__index = ai
 --   guided       minimax only: rank the opponent's partial replies by the
 --                damage they set up against the AI, so combos whose first
 --                step looks harmless (a frog pull, then the kill) are found.
+--   tactical     minimax only: the reply search also tries each action with
+--                every follow-up capture, so "step, then shoot" and "copy,
+--                then shoot" are seen even when the step alone looks idle.
+--   ownTactical  reply only: the same extension in the search over the AI's
+--                own turn.
+--   replySummons minimax only: false leaves the opponent's summons out of
+--                its reply (a Wither's still in: its summon explodes), so
+--                the reply search spends its depth on captures.
 --   actionDelay  seconds between visible actions, so a human can follow.
 ai.levels = {
     easy = {
@@ -57,7 +65,9 @@ ai.levels = {
         replyBeam = 4,
         replyDepth = 8,
         minimax = true,
-        guided = true,
+        tactical = true,
+        ownTactical = true,
+        replySummons = false,
         actionDelay = 0.3,
     },
 }
