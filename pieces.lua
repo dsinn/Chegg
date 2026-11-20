@@ -829,12 +829,9 @@ function piece:setAttackAs(targetType)
     end
 end
 
-function piece:new()
-    local new = setmetatable(self, piece)
-
-    local pType = self.type or 'error'
-    local typeData = piecetypes[pType]
-
+-- Sets the fields every piece copies from its type.
+local function initFields(self)
+    local typeData = piecetypes[self.type or 'error']
     self.typeData = typeData
     self.getAttackSplash = typeData.getAttackSplash
     self.moveRange = typeData.moveRange
@@ -846,6 +843,23 @@ function piece:new()
     self.onFinishAttackTo = typeData.onFinishAttackTo
     self.onEndTurn = typeData.onEndTurn
     self.attackCost = typeData.attackCost
+    return typeData
+end
+
+-- Rebuilds a piece from plain data (type, board, player, pos, summonTurn,
+-- lastMoved, lastSpecialed, attackAs) without any summon effects. Used by the
+-- AI to recreate boards inside worker threads.
+function piece.restore(t)
+    setmetatable(t, piece)
+    initFields(t)
+    t:setAttackAs(t.attackAs)
+    t.renderPos = {unpack(t.pos)}
+    return t
+end
+
+function piece:new()
+    setmetatable(self, piece)
+    local typeData = initFields(self)
 
     self:setAttackAs()
 

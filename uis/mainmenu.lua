@@ -27,13 +27,35 @@ function menu:new()
                 activeIf = function() return savedDeck end,
             },
             {
-                xy = function() return love.graphics.getWidth()/2-100, love.graphics.getHeight()/2+110 end,
+                xy = function() return love.graphics.getWidth()/2-100, love.graphics.getHeight()/2+250 end,
                 widthheight = function() return 200, 50 end,
                 press = function() love.event.push'quit' end,
                 text = 'quit',
             },
         }
     }
+
+    -- Single player: one button per AI difficulty, under a 'vs computer' label.
+    local function startVsComputer(level)
+        if not savedDeck then return end
+        setMode(require'uis.game'.new{
+            deck = love.filesystem.load'decks/deck.lua'(),
+            isStartingPlayer = love.math.random(1, 2)==1,
+            opponentType = 'ai',
+            opponentDeck = require'ai'.randomDeck(),
+            aiLevel = level,
+            seed = love.math.random(1, 9999999),
+        })
+    end
+    for i, level in ipairs{'easy', 'medium', 'hard'} do
+        table.insert(self.activepreview.buttons, {
+            xy = function() return love.graphics.getWidth()/2-215+(i-1)*145, love.graphics.getHeight()/2+165 end,
+            widthheight = function() return 140, 60 end,
+            press = function() startVsComputer(level) end,
+            text = level,
+            activeIf = function() return savedDeck end,
+        })
+    end
     return self
 end
 
@@ -48,6 +70,9 @@ function menu:draw()
     love.graphics.printf('chegg', text, 0, 100, love.graphics.getWidth()/2, 'center', 0, 2, 2)
     love.graphics.setColor(1,1,1)
     love.graphics.draw(spriteAtlas, crown, love.graphics.getWidth()/2, 60, 0, 2, 2, 35, 25)
+    love.graphics.setColor(0,0,0)
+    love.graphics.printf('vs computer', text, 0, love.graphics.getHeight()/2+125, love.graphics.getWidth()/2, 'center', 0, 2, 2)
+    love.graphics.setColor(1,1,1)
     if self.activepreview then self.activepreview:draw() end
 end
 

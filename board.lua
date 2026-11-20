@@ -88,6 +88,7 @@ local selectedPiece, dragWithPiece, hoverAttackHighlight
 function board:getSelectedPiece() return selectedPiece end
 
 function board:createEffectAt(effect, x, y)
+    if self.silent then return end -- AI simulation boards have no visuals
     if not particles[effect] then return end
     particles[effect]:setPosition(gridSize/2*(x-0.5), gridSize/2*(y-0.5))
     particles[effect]:emit(1)
