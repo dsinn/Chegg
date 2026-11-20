@@ -517,7 +517,10 @@ local piecetypes; piecetypes = {
             local sX, sY = unpack(self.pos)
             local board = self.board
 
-            for i, piece in ipairs(board:getPiecesAt(targetX, targetY)) do
+            local pieces = board:getPiecesAt(targetX, targetY)
+
+            for i=#pieces, 1, -1 do
+                local piece = pieces[i]
                 board:moveNoSend(piece, sX, sY)
             end
             board:moveNoSend(self, targetX, targetY)
