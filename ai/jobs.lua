@@ -8,7 +8,9 @@
 --       actions) and returns the best k end-of-turn plans:
 --       {{seq, endKey, foot, score}, ...}, where foot lists where `me`'s
 --       pieces end up (sorted 'x,y,type' strings, for candidate diversity).
---       `tactical` is the turn search's tactical level (0 to 3).
+--       `tactical` is the turn search's tactical level (0 to 3). With
+--       `refutations` (opponent action lists), positions are scored by
+--       jobs.refutedScore against them.
 --   {kind='reply', snap, detSeed, me, seq, samples, seed, replyBeam, replyDepth, minimax, guided, tactical,
 --    replySummons}
 --       Rebuilds the same re-dealt position (same detSeed), plays `seq`, ends
@@ -18,7 +20,8 @@
 --       opponent's turn is beam-searched at replyBeam x replyDepth instead,
 --       and the position worst for `me` among all it reaches counts, judged
 --       without the exposure features (the reply has tested exposure for
---       real). Returns {score}: the average score for `me` after the reply.
+--       real). Returns {score, reply}: the average score for `me` after the
+--       reply, and with `minimax` the reply found in the first sample.
 
 local sim        = require'ai.sim'
 local eval       = require'ai.eval'
@@ -50,9 +53,40 @@ function jobs.footprint(b, idx)
     return foot
 end
 
+-- Score of players[idx]'s end-of-turn position `b`, lowered to what is left
+-- after any of `refutations` (opponent action lists) that still works there:
+-- the turn ends and the opponent plays it action by action (judged with
+-- `leaf`, as replies are). One that hits an illegal action doesn't count.
+-- Mirrors `refuted_score` in chegg-headless.
+function jobs.refutedScore(b, idx, refutations, leaf)
+    local p = b.players[idx]
+    local s = eval.score(b, p, 'opp')
+    if sim.isOver(b) or not b:isActivePlayer(p) or not b:canEndTurn(p) then return s end
+    local ended = sim.clone(b)
+    ended:endTurn(ended.players[idx])
+    for _, r in ipairs(refutations) do
+        local c = sim.clone(ended)
+        local opp = c:getOpponent(c.players[idx])
+        local works = true
+        for _, a in ipairs(r) do
+            if sim.isOver(c) then break end
+            if not sim.apply(c, opp, a) then works = false break end
+        end
+        if works then
+            s = math.min(s, eval.score(c, c.players[idx], 'me', leaf))
+        end
+    end
+    return s
+end
+
 function jobs.candidates(job, ctx)
     local start = root(job)
-    local nodes = turnsearch.search(start, job.me, job.beam, job.depth, ctx, job.part, job.parts, nil, job.tactical)
+    local scorer
+    if job.refutations then
+        local leaf = eval.withoutExposure()
+        scorer = function(b) return jobs.refutedScore(b, job.me, job.refutations, leaf) end
+    end
+    local nodes = turnsearch.search(start, job.me, job.beam, job.depth, ctx, job.part, job.parts, scorer, job.tactical)
     local out = {}
     for i=1, math.min(job.k, #nodes) do
         local n = nodes[i]
@@ -84,7 +118,7 @@ end
 
 -- Beam-searches the opponent's reply turn on `c` and returns the score for
 -- players[meIdx] of the worst position it reaches (stopping anywhere),
--- judged with `leafWeights`. With job.guided, the opponent's partial turns
+-- judged with `leafWeights`, and the opponent's actions that reach it. With job.guided, the opponent's partial turns
 -- are ranked by the damage they set up against players[meIdx] (its full
 -- evaluation, negated) rather than by the opponent's own evaluation, so a
 -- set-up like a frog pull before the kill survives the beam. With
@@ -96,13 +130,13 @@ local function minimaxReply(c, meIdx, opp, job, ctx, leafWeights)
     if job.guided then
         scorer = function(b) return -eval.score(b, b.players[meIdx], 'opp') end
     end
-    local worst
+    local worst, worstSeq
     for _, node in ipairs(turnsearch.search(c, sim.playerIndex(c, opp), job.replyBeam, job.replyDepth, ctx, nil, nil, scorer, job.tactical,
         job.replySummons==false)) do
         local s = eval.score(node.board, node.board.players[meIdx], 'me', leafWeights)
-        if not worst or s<worst then worst = s end
+        if not worst or s<worst then worst, worstSeq = s, node.seq end
     end
-    return worst
+    return worst, worstSeq
 end
 
 function jobs.reply(job, ctx)
@@ -112,8 +146,8 @@ function jobs.reply(job, ctx)
     end
     local rng = love.math.newRandomGenerator(job.seed)
     local leafWeights = job.minimax and eval.withoutExposure()
-    local total = 0
-    for _=1, job.samples do
+    local total, reply = 0, nil
+    for i=1, job.samples do
         local c = sim.clone(b, b.players[job.me], rng)
         local me = c.players[job.me]
         local opp = c:getOpponent(me)
@@ -121,12 +155,14 @@ function jobs.reply(job, ctx)
             c:endTurn(me)
         end
         if job.minimax and not sim.isOver(c) and c:isActivePlayer(opp) then
-            total = total+minimaxReply(c, job.me, opp, job, ctx, leafWeights)
+            local s, seq = minimaxReply(c, job.me, opp, job, ctx, leafWeights)
+            total = total+s
+            if i==1 then reply = seq end
         else
             total = total+playedReply(c, me, opp, job, ctx, rng)
         end
     end
-    return {score = total/job.samples}
+    return {score = total/job.samples, reply = reply}
 end
 
 function jobs.run(job, ctx)

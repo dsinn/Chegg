@@ -34,6 +34,9 @@ local function tacticalLevel(on, params)
     return params.setups and 2 or 1
 end
 
+-- An after-reply score at or below this means the reply wins the game.
+local LOST = -eval.WIN/2
+
 local function sameAction(a, b)
     return a.k==b.k and a.card==b.card and a.x==b.x and a.y==b.y and a.fx==b.fx and a.fy==b.fy
 end
@@ -101,40 +104,85 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
     local detSeed = rng:random(1, 1073741823)
 
     local parts = pool.size()
-    local searches = {}
-    -- With spread, each part returns extra plans for the shortlist to choose from.
-    local perPart = params.candidates*((params.spread or 0)>0 and 3 or 1)
-    for part=1, parts do
-        searches[part] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
-            beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
-            tactical=tacticalLevel(params.ownTactical, params)}
-    end
-    local found, seen = {}, {}
-    for _, list in ipairs(pool.run(searches, ctx)) do
-        for _, c in ipairs(list) do
-            if not seen[c.endKey] then
-                seen[c.endKey] = true
-                found[#found+1] = c
+    -- The turn's plans, best first, merged over the worker parts; with
+    -- `refutations`, scored against them (see jobs.refutedScore).
+    local function search(refutations)
+        local searches = {}
+        -- With spread, each part returns extra plans for the shortlist to choose from.
+        local perPart = params.candidates*((params.spread or 0)>0 and 3 or 1)
+        for part=1, parts do
+            searches[part] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
+                beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
+                tactical=tacticalLevel(params.ownTactical, params), refutations=refutations}
+        end
+        local found, seen = {}, {}
+        for _, list in ipairs(pool.run(searches, ctx)) do
+            for _, c in ipairs(list) do
+                if not seen[c.endKey] then
+                    seen[c.endKey] = true
+                    found[#found+1] = c
+                end
             end
         end
+        table.sort(found, function(a, b) return a.score>b.score end)
+        return found
     end
-    table.sort(found, function(a, b) return a.score>b.score end)
+    local found = search(nil)
     if found[1].score>=eval.WIN then
         return found[1].seq[1] or {k='end'}
     end
-    found = pickCandidates(found, params.candidates, params.spread)
 
-    local replies = {}
-    for i, c in ipairs(found) do
-        replies[i] = {kind='reply', snap=snap, detSeed=detSeed, me=idx, seq=c.seq,
-            samples=params.samples, seed=rng:random(1, 1073741823),
-            replyBeam=params.replyBeam, replyDepth=params.replyDepth, minimax=params.minimax,
-            guided=params.guided, tactical=tacticalLevel(params.tactical, params),
-            replySummons=params.replySummons}
+    -- Each shortlisted plan with its average score after the reply and the
+    -- reply found in its first sample.
+    local weighed = {}
+    local function weigh(cands)
+        local replies = {}
+        for i, c in ipairs(cands) do
+            replies[i] = {kind='reply', snap=snap, detSeed=detSeed, me=idx, seq=c.seq,
+                samples=params.samples, seed=rng:random(1, 1073741823),
+                replyBeam=params.replyBeam, replyDepth=params.replyDepth, minimax=params.minimax,
+                guided=params.guided, tactical=tacticalLevel(params.tactical, params),
+                replySummons=params.replySummons}
+        end
+        for i, r in ipairs(pool.run(replies, ctx)) do
+            weighed[#weighed+1] = {cand=cands[i], score=r.score, reply=r.reply}
+        end
     end
+    weigh(pickCandidates(found, params.candidates, params.spread))
+
+    -- With `refute`, when every plan loses the game to its reply, search the
+    -- turn again assuming the opponent plays those replies whenever they still
+    -- work, so the new plans block or remove the threat (up to two rounds).
+    local refutations, known = {}, {}
+    for _=1, 2 do
+        if not params.refute then break end
+        local saved = false
+        for _, w in ipairs(weighed) do
+            if w.score>LOST then saved = true end
+        end
+        if saved then break end
+        local before = #refutations
+        for _, w in ipairs(weighed) do
+            local r, names = {}, {}
+            for _, a in ipairs(w.reply or {}) do
+                if a.k~='summon' and a.k~='end' then
+                    r[#r+1] = a
+                    names[#names+1] = sim.describe(a)
+                end
+            end
+            local name = table.concat(names, ';')
+            if #r>0 and not known[name] then
+                known[name] = true
+                refutations[#refutations+1] = r
+            end
+        end
+        if #refutations==before then break end
+        weigh(pickCandidates(search(refutations), params.candidates, params.spread))
+    end
+
     local best, bestScore
-    for i, r in ipairs(pool.run(replies, ctx)) do
-        if not bestScore or r.score>bestScore then best, bestScore = found[i], r.score end
+    for _, w in ipairs(weighed) do
+        if not bestScore or w.score>bestScore then best, bestScore = w.cand, w.score end
     end
 
     if #best.seq==0 then return {k='end'} end

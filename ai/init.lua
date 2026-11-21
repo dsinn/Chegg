@@ -46,6 +46,9 @@ ai.__index = ai
 --                with another piece" is seen too.
 --   vacate       with setups: also a frog's pull through a square one of the
 --                mover's pieces just left (clearing the frog's line first).
+--   refute       minimax only: when every plan loses the game to the reply
+--                found for it, search the turn again assuming the opponent
+--                plays those replies whenever they still work.
 --   replySummons minimax only: false leaves the opponent's summons out of
 --                its reply (a Wither's still in: its summon explodes), so
 --                the reply search spends its depth on captures.
@@ -75,6 +78,7 @@ ai.levels = {
         ownTactical = true,
         setups = true,
         vacate = true,
+        refute = true,
         replySummons = false,
         actionDelay = 0.3,
     },
