@@ -24,7 +24,7 @@ for i, k in ipairs(KINDS) do NAMES[i] = 'material.'..k end
 for _, n in ipairs{'hand', 'deck', 'king_threat_moving', 'king_threat_waiting', 'hanging_moving',
     'hanging_waiting', 'advance', 'guard', 'tempo', 'king_advance', 'king_zone', 'king_escape',
     'defended', 'home_intrusion', 'mana_wasted', 'exposed_moving', 'exposed_waiting',
-    'exposed_undefended'} do
+    'exposed_undefended', 'cat_income', 'econ_safe', 'sniffer_held', 'econ_advance'} do
     NAMES[#NAMES+1] = n
 end
 eval.NAMES = NAMES
@@ -49,8 +49,19 @@ function eval.typeValue(t)
     return v
 end
 
--- Weights by feature name, from chegg-headless's weights/frog55.txt
--- (2026-11-20): tuned by self-play (SPSA with the turn planner,
+-- Weights by feature name, from chegg-headless's weights/trade20-econ.txt
+-- (2026-11-21). That is weights/frog55.txt with every material value doubled,
+-- so trades decide more than position (people beat the computer by taking
+-- the pieces it pushes forward), plus hand-set Cat and Sniffer terms:
+-- cat_income (a Cat out of reach is worth more while the deck lasts),
+-- econ_safe (a bonus per Cat or Sniffer out of reach), sniffer_held (holding
+-- a Sniffer while the opponent's deck still has cards to steal costs) and
+-- econ_advance (keep them in the back rows). Strong players summon a Cat as
+-- soon as they can afford it and a Sniffer before the other deck runs low,
+-- both in a back corner by their king. Against the computer opponents these
+-- cost about 30 Elo (they rush, so 5 mana on income loses tempo), but they
+-- pay off against people who hold back.
+-- frog55.txt (2026-11-20) was tuned by self-play (SPSA with the turn planner,
 -- weights/spsa-exposed.txt), except the exposure weights (-3) and advance
 -- (-1, half the tuned pull forward; no cost against the AI), set by hand
 -- from games against a human. Self-play can't learn them: no AI opponent keeps
@@ -60,23 +71,23 @@ end
 -- plays frog combos (and people pull with it to set up half their kills),
 -- valuing it like a Skeleton is +48 Elo.
 eval.weights = {
-    ['material.zombie'] = 29.5319,
-    ['material.creeper'] = 28.1178,
-    ['material.pig'] = 11.1017,
-    ['material.rabbit'] = 20.2823,
-    ['material.pufferfish'] = 31.3145,
-    ['material.golem'] = 37.7523,
-    ['material.frog'] = 55.0000,
-    ['material.skeleton'] = 55.6210,
-    ['material.blaze'] = 45.5208,
-    ['material.phantom'] = 63.1713,
-    ['material.farlander'] = 25.4440,
-    ['material.slime'] = 67.4685,
-    ['material.box'] = 30.3708,
-    ['material.parrot'] = 31.5568,
-    ['material.cat'] = 42.9626,
-    ['material.sniffer'] = 27.8557,
-    ['material.wither'] = 41.2614,
+    ['material.zombie'] = 59.0638,
+    ['material.creeper'] = 56.2356,
+    ['material.pig'] = 22.2034,
+    ['material.rabbit'] = 40.5646,
+    ['material.pufferfish'] = 62.6290,
+    ['material.golem'] = 75.5046,
+    ['material.frog'] = 110.0000,
+    ['material.skeleton'] = 111.2420,
+    ['material.blaze'] = 91.0416,
+    ['material.phantom'] = 126.3426,
+    ['material.farlander'] = 50.8880,
+    ['material.slime'] = 134.9370,
+    ['material.box'] = 60.7416,
+    ['material.parrot'] = 63.1136,
+    ['material.cat'] = 85.9252,
+    ['material.sniffer'] = 55.7114,
+    ['material.wither'] = 82.5228,
     hand = 6.1637,
     deck = 2.0242,
     king_threat_moving = -35.0353,
@@ -95,6 +106,10 @@ eval.weights = {
     exposed_moving = -0.0462,
     exposed_waiting = -3.0000,
     exposed_undefended = -3.0000,
+    cat_income = 16.0000,
+    econ_safe = 40.0000,
+    sniffer_held = -10.0000,
+    econ_advance = -3.0000,
 }
 
 local function key(x, y) return x*100+y end
@@ -265,6 +280,15 @@ function eval.features(board, me, meToMove)
     f[INDEX.hand] = #me.hand-#opp.hand
     f[INDEX.deck] = #me.deck-#opp.deck
     f[INDEX.tempo] = meToMove and 1 or -1
+    for _, p in ipairs{me, opp} do
+        local sign = p==me and 1 or -1
+        local held = 0
+        for _, card in ipairs(p.hand) do
+            if card=='sniffer' then held = held+1 end
+        end
+        local other = p==me and opp or me
+        f[INDEX.sniffer_held] = f[INDEX.sniffer_held]+sign*held*math.min(2, #other.deck)
+    end
 
     for _, p in ipairs{me, opp} do
         local sign = p==me and 1 or -1
@@ -330,6 +354,13 @@ function eval.features(board, me, meToMove)
                     exposed = frogExposed(board, enemy, pc.pos[1], pc.pos[2], reaches[enemy])
                         or swapExposed(enemy, pc.pos[1], pc.pos[2], reaches[enemy])
                 end
+                if not exposed and pc.type=='cat' then
+                    f[INDEX.cat_income] = f[INDEX.cat_income]+sign*#p.deck
+                end
+                if pc.type=='cat' or pc.type=='sniffer' then
+                    local rows = p==board.localplayer and board.rows-pc.pos[2] or pc.pos[2]-1
+                    f[INDEX.econ_advance] = f[INDEX.econ_advance]+sign*rows
+                end
                 if exposed then
                     if ownerMoves then
                         f[INDEX.exposed_moving] = f[INDEX.exposed_moving]+sign*v
@@ -339,6 +370,8 @@ function eval.features(board, me, meToMove)
                             f[INDEX.exposed_undefended] = f[INDEX.exposed_undefended]+sign*v
                         end
                     end
+                elseif pc.type=='cat' or pc.type=='sniffer' then
+                    f[INDEX.econ_safe] = f[INDEX.econ_safe]+sign
                 end
                 if enemyKing and ((pc.attackRange or 0)>0 or pc.attackMove) then
                     f[INDEX.advance] = f[INDEX.advance]+sign*cheb(pc.pos[1], pc.pos[2], enemyKing.pos[1], enemyKing.pos[2])
@@ -379,7 +412,7 @@ end
 function eval.withoutExposure()
     local w = {}
     for k, v in pairs(eval.weights) do w[k] = v end
-    w.exposed_moving, w.exposed_waiting, w.exposed_undefended = 0, 0, 0
+    w.exposed_moving, w.exposed_waiting, w.exposed_undefended, w.econ_safe = 0, 0, 0, 0
     return w
 end
 

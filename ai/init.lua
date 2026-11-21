@@ -97,25 +97,73 @@ ai.levels = {
 }
 
 -- The computer's decks: a varied pool of strong decks, one picked at random
--- each game. Found by a MAP-Elites deck search in chegg-headless (the best deck
--- for each pair of most-used minions, 2026-11-20); the comment on each is its
--- win rate for the planner against random decks. The two Creeper swarms it
--- also found (10-11 Creepers) were dropped after playtesting: they beat random
--- decks but do nothing against a player who keeps out of reach.
+-- each game. Most were found by a MAP-Elites deck search in chegg-headless
+-- (the best deck for each pair of most-used minions, 2026-11-20). On
+-- 2026-11-21 the pool was rebuilt around frogs after playtesting: Medium's
+-- frog pulls set up its ranged attackers (Skeletons, Blazes) and Phantoms,
+-- and the decks without them win far less. The Creeper-heavy rushes (3 to 11
+-- Creepers) were dropped: against a player who keeps out of reach they can
+-- only attack by walking into range, and frog-and-ranged decks beat every
+-- one of them 98-100% with Medium. The comment on each deck is Medium's win
+-- rate against random decks (reply 8:10:12 with weights/trade20-econ.txt, 50
+-- games each, `decks rate`; about +-7%). Dropped with them: three decks with
+-- one frog or none (Farlander/Phantom 56%, Skeleton/Phantom/Parrot 39%,
+-- Golem/Wither/Parrot 32%). The Cat and Sniffer decks swap those two in for
+-- the weakest cards; they pay off against a player who holds back.
 ai.decks = {
-    {'zombie', 'zombie', 'zombie', 'zombie', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'box'}, -- 87%
-    {'zombie', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'golem', 'golem', 'skeleton', 'skeleton', 'blaze', 'blaze', 'phantom'}, -- 87%
-    {'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pufferfish', 'golem', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'slime', 'wither'}, -- 83%
-    {'zombie', 'zombie', 'golem', 'golem', 'golem', 'golem', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'phantom', 'phantom', 'farlander', 'parrot', 'wither'}, -- 83%
-    {'zombie', 'zombie', 'creeper', 'golem', 'golem', 'frog', 'skeleton', 'skeleton', 'blaze', 'phantom', 'phantom', 'farlander', 'farlander', 'farlander', 'slime'}, -- 83%
-    {'zombie', 'creeper', 'golem', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'}, -- 83%
+    {'creeper', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander', 'farlander'}, -- 99%
+    {'cat', 'sniffer', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander'}, -- 92%
+    {'cat', 'sniffer', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
+    {'zombie', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
     {'zombie', 'zombie', 'zombie', 'zombie', 'zombie', 'pig', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'}, -- 83%
-    {'zombie', 'zombie', 'pig', 'pufferfish', 'golem', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'phantom', 'phantom', 'phantom', 'parrot'}, -- 83%
-    {'creeper', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander', 'farlander'}, -- 82%
-    {'creeper', 'pufferfish', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'phantom', 'phantom', 'phantom'}, -- 81%
+    {'zombie', 'zombie', 'zombie', 'zombie', 'cat', 'sniffer', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'}, -- 81%
+    {'zombie', 'creeper', 'golem', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'}, -- 80%
+    {'creeper', 'pufferfish', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'phantom', 'phantom', 'phantom'}, -- 80%
 }
 
+-- A deck from a `--deck` launch option (see main.lua), or nil and a reason:
+-- a number picks that deck of ai.decks; a card name picks at random among
+-- the decks holding it; 15 comma-separated card names are the deck itself.
+function ai.deckFromOption(spec)
+    local n = tonumber(spec)
+    if n then
+        if ai.decks[n] then return table.copy(ai.decks[n]) end
+        return nil, ('there are only %d decks'):format(#ai.decks)
+    end
+    local Piece = require'pieces'
+    local function card(name)
+        local data = Piece.getTypeData(name)
+        return data and data.deck and name
+    end
+    if spec:find(',') then
+        local deck = {}
+        for name in spec:gmatch('[^,]+') do
+            name = name:lower():match('^%s*(.-)%s*$')
+            if not card(name) then return nil, ("'%s' isn't a deck card"):format(name) end
+            deck[#deck+1] = name
+        end
+        if #deck~=15 then return nil, ('a deck needs 15 cards, not %d'):format(#deck) end
+        return deck
+    end
+    local name = spec:lower()
+    if not card(name) then return nil, ("'%s' isn't a deck card"):format(spec) end
+    local holding = {}
+    for _, d in ipairs(ai.decks) do
+        for _, c in ipairs(d) do
+            if c==name then holding[#holding+1] = d break end
+        end
+    end
+    if #holding==0 then return nil, ('no deck holds a %s'):format(name) end
+    return table.copy(holding[love.math.random(1, #holding)])
+end
+
 function ai.randomDeck()
+    local spec = LaunchOptions and LaunchOptions.aiDeck
+    if spec then
+        local deck, why = ai.deckFromOption(spec)
+        if deck then return deck end
+        print(('--deck %s ignored: %s'):format(spec, why))
+    end
     return table.copy(ai.decks[love.math.random(1, #ai.decks)])
 end
 
