@@ -17,7 +17,7 @@ ai.__index = ai
 -- Peaceful is a training opponent that never fights (ai/peaceful.lua). Easy
 -- and Medium were measured in chegg-headless with the tuned weights in
 -- ai/eval.lua; Medium is several hundred Elo stronger.
---   strategy     'peaceful' (keeps away, never attacks), 'greedy' (best
+--   strategy     'peaceful' (never attacks, minions close in), 'greedy' (best
 --                single action), 'planner' (beam search over
 --                the turn's actions), 'reply' (plans turns, checks the
 --                opponent's replies, uses worker threads; ai/replysearch.lua)
