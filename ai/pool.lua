@@ -8,8 +8,12 @@ local jobs = require'ai.jobs'
 local pool = {}
 
 local MAX_WORKERS = 8
-local started, threads, jobsIn, resultsOut
+local started, threads, jobsIn, resultsOut, generations
 local nextId = 0
+-- Each pool.run is a new generation; workers drop jobs from older ones (an
+-- abandoned search, say a ponder the opponent's next action made stale), so
+-- they are free for the new jobs at once.
+local generation = 0
 
 local function start()
     if started then return end
@@ -18,10 +22,11 @@ local function start()
     local n = math.max(1, math.min(MAX_WORKERS, love.system.getProcessorCount()-1))
     jobsIn = love.thread.newChannel()
     resultsOut = love.thread.newChannel()
+    generations = love.thread.newChannel()
     threads = {}
     for i=1, n do
         threads[i] = love.thread.newThread('ai/worker.lua')
-        threads[i]:start(jobsIn, resultsOut)
+        threads[i]:start(jobsIn, resultsOut, generations)
     end
 end
 
@@ -49,10 +54,14 @@ function pool.run(list, ctx)
     -- Jobs from an abandoned search (say, the player left the game) are
     -- dropped, and any of their late results ignored.
     jobsIn:clear()
+    generation = generation+1
+    generations:clear()
+    generations:push(generation)
     local slot = {}
     for i, job in ipairs(list) do
         nextId = nextId+1
         job.id = nextId
+        job.gen = generation
         slot[nextId] = i
         jobsIn:push(table.serialize(job))
     end

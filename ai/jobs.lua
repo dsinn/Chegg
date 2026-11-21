@@ -10,7 +10,8 @@
 --       pieces end up (sorted 'x,y,type' strings, for candidate diversity).
 --       `tactical` is the turn search's tactical level (0 to 3). With
 --       `refutations` (opponent action lists), positions are scored by
---       jobs.refutedScore against them.
+--       jobs.refutedScore against them; with `caution`, by
+--       eval.cautiousScore with that factor.
 --   {kind='reply', snap, detSeed, me, seq, samples, seed, replyBeam, replyDepth, minimax, guided, tactical,
 --    replySummons}
 --       Rebuilds the same re-dealt position (same detSeed), plays `seq`, ends
@@ -85,6 +86,8 @@ function jobs.candidates(job, ctx)
     if job.refutations then
         local leaf = eval.withoutExposure()
         scorer = function(b) return jobs.refutedScore(b, job.me, job.refutations, leaf) end
+    elseif job.caution then
+        scorer = function(b) return eval.cautiousScore(b, b.players[job.me], job.caution) end
     end
     local nodes = turnsearch.search(start, job.me, job.beam, job.depth, ctx, job.part, job.parts, scorer, job.tactical)
     local out = {}

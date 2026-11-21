@@ -4,17 +4,21 @@
 
 local sim        = require'ai.sim'
 local greedy     = require'ai.greedy'
+local peaceful   = require'ai.peaceful'
 local montecarlo = require'ai.montecarlo'
 local planner    = require'ai.planner'
 local replysearch = require'ai.replysearch'
+local turnsearch = require'ai.turnsearch'
 
 local ai = {}
 ai.__index = ai
 
 -- Difficulty presets. Tune these to change how strong each level plays.
--- Strengths were measured in chegg-headless with the tuned weights in
--- ai/eval.lua; each step is roughly 100-200 Elo.
---   strategy     'greedy' (best single action), 'planner' (beam search over
+-- Peaceful is a training opponent that never fights (ai/peaceful.lua). Easy
+-- and Medium were measured in chegg-headless with the tuned weights in
+-- ai/eval.lua; Medium is several hundred Elo stronger.
+--   strategy     'peaceful' (keeps away, never attacks), 'greedy' (best
+--                single action), 'planner' (beam search over
 --                the turn's actions), 'reply' (plans turns, checks the
 --                opponent's replies, uses worker threads; ai/replysearch.lua)
 --                or 'montecarlo' (ai/montecarlo.lua; at the budgets Lua
@@ -49,26 +53,32 @@ ai.__index = ai
 --   refute       minimax only: when every plan loses the game to the reply
 --                found for it, search the turn again assuming the opponent
 --                plays those replies whenever they still work.
+--   cautious     reply only: this many extra plans from a search that fears
+--                leaving its pieces in reach 5x more (and values its own
+--                material as much more), so quiet turns are weighed against
+--                plans that all expose a piece.
 --   replySummons minimax only: false leaves the opponent's summons out of
 --                its reply (a Wither's still in: its summon explodes), so
 --                the reply search spends its depth on captures.
+--   ponder       reply only: think during the other player's turn. After
+--                each of their actions it decides its own next turn as if
+--                they ended theirs there, and uses that decision if they do.
 --   actionDelay  seconds between visible actions, so a human can follow.
 ai.levels = {
-    easy = {
-        strategy = 'greedy',
-        noise = 20,
+    peaceful = {
+        strategy = 'peaceful',
         actionDelay = 0.5,
     },
-    medium = {
+    easy = {
         strategy = 'greedy',
         noise = 8,
         actionDelay = 0.4,
     },
-    hard = {
+    medium = {
         strategy = 'reply',
-        beam = 8,
+        beam = 12,
         depth = 10,
-        candidates = 12,
+        candidates = 20,
         spread = 8,
         samples = 4,
         replyBeam = 4,
@@ -79,7 +89,9 @@ ai.levels = {
         setups = true,
         vacate = true,
         refute = true,
+        cautious = 4,
         replySummons = false,
+        ponder = true,
         actionDelay = 0.3,
     },
 }
@@ -113,7 +125,7 @@ local TURN_START_DELAY = 0.7
 
 function ai.new(level, board, player)
     local self = setmetatable({}, ai)
-    self.level = ai.levels[level] and level or 'easy'
+    self.level = ai.levels[level] and level or 'peaceful'
     self.params = ai.levels[self.level]
     self.board = board
     self.player = player
@@ -165,7 +177,9 @@ function ai:decide()
         end
         return {k='end'}
     end
-    if self.params.strategy=='greedy' then
+    if self.params.strategy=='peaceful' then
+        return peaceful.choose(b, me, self.params, self.ctx, self.rng)
+    elseif self.params.strategy=='greedy' then
         return greedy.choose(b, me, self.params, self.ctx, self.rng)
     elseif self.params.strategy=='planner' then
         return planner.choose(b, me, self.params, self.ctx, self.rng)
@@ -191,39 +205,115 @@ function ai:isThinking()
     return self.co~=nil
 end
 
+-- Runs `co` for this frame's slice. Returns true and its result once it has
+-- finished.
+function ai:resume(co)
+    self.sliceStart = love.timer.getTime()
+    sounds.muted = true
+    local ok, result = coroutine.resume(co)
+    sounds.muted = false
+    self.thinkTime = self.thinkTime+(love.timer.getTime()-self.sliceStart)
+    if not ok then
+        error('AI error: '..debug.traceback(co, result), 0)
+    end
+    if coroutine.status(co)~='dead' then return false end
+    return true, result
+end
+
+-- Pondering (the `ponder` setting): while the other player takes their turn,
+-- decide our next turn as if they ended theirs now, on a copy of the board.
+-- Each of their actions starts it again from the new position. The ponder is
+-- adopted at the start of our turn when the position is the one it expected
+-- (same pieces, mana and hand, so the same card drawn), and dropped
+-- otherwise; workers drop its abandoned jobs (ai/pool.lua).
+function ai:ponderUpdate()
+    local b, me = self.board, self.player
+    local idx = sim.playerIndex(b, me)
+    local from = turnsearch.key(b, idx)
+    local p = self.ponder
+    if not p or p.from~=from then
+        p = {from=from}
+        self.ponder = p
+        local opp = b:getOpponent(me)
+        if b.turn>0 and opp and b:isActivePlayer(opp) and b:canEndTurn(opp) then
+            -- The copy gets its own generator: start-of-turn effects must not
+            -- advance the game's.
+            local c = sim.clone(b, nil, love.math.newRandomGenerator(self.rng:random(1, 1073741823)))
+            local cme = c.players[idx]
+            sim.apply(c, c.players[sim.playerIndex(b, opp)], {k='end'})
+            if not sim.isOver(c) and c:isActivePlayer(cme) then
+                p.expect = turnsearch.key(c, idx)
+                p.memory = {}
+                p.co = coroutine.create(function()
+                    return replysearch.choose(c, cme, self.params, self.ctx, self.rng, p.memory)
+                end)
+            end
+        end
+    end
+    if p.co and not p.done then
+        local done, result = self:resume(p.co)
+        if done then p.done, p.result = true, result end
+    end
+end
+
+-- At the start of our turn: continue or use the ponder if it expected this
+-- position.
+-- Counts, for tests: turns that used a ponder (finished or still running)
+-- and turns whose ponder expected a different position.
+function ai:adoptPonder()
+    local p = self.ponder
+    self.ponder = nil
+    if not (p and p.co) then return end
+    if p.expect~=turnsearch.key(self.board, sim.playerIndex(self.board, self.player)) then
+        self.ponderMisses = (self.ponderMisses or 0)+1
+        return
+    end
+    self.ponderHits = (self.ponderHits or 0)+1
+    if p.done then
+        self.plan = p.memory.plan
+        self.pending = {p.result}
+    else
+        self.co, self.coMemory = p.co, p.memory
+    end
+end
+
 function ai:update(dt)
     local b, me = self.board, self.player
     if gameOver(b) or not b:isActivePlayer(me) then
-        self.co, self.turnSeen = nil, nil
+        self.co, self.coMemory, self.pending, self.turnSeen = nil, nil, nil, nil
+        if self.params.ponder and not gameOver(b) then
+            self:ponderUpdate()
+        else
+            self.ponder = nil
+        end
         return
     end
     if self.turnSeen~=b.turn then
         self.turnSeen = b.turn
         self.actionsThisTurn = 0
         self.delay = math.max(self.delay, TURN_START_DELAY)
+        self.thinkTime = 0
+        self:adoptPonder()
     end
-    if self.delay>0 then
-        self.delay = self.delay-dt
-        return
-    end
+    -- Thinking goes on during the delay between visible actions.
+    if self.delay>0 then self.delay = self.delay-dt end
 
-    if not self.co then
+    if not self.co and not self.pending then
         self.thinkTime = 0
         self.co = coroutine.create(function() return self:decide() end)
     end
-    self.sliceStart = love.timer.getTime()
-    sounds.muted = true
-    local ok, result = coroutine.resume(self.co)
-    sounds.muted = false
-    self.thinkTime = self.thinkTime+(love.timer.getTime()-self.sliceStart)
-    if not ok then
-        local trace = debug.traceback(self.co, result)
-        self.co = nil
-        error('AI error: '..trace, 0)
+    if self.co then
+        local done, result = self:resume(self.co)
+        if done then
+            if self.coMemory then self.plan = self.coMemory.plan end
+            self.co, self.coMemory, self.pending = nil, nil, {result}
+        end
     end
-    if coroutine.status(self.co)~='dead' then return end
-    self.co = nil
-    self:perform(result)
+    if self.pending and self.delay<=0 then
+        local action = self.pending[1]
+        self.pending = nil
+        self:perform(action)
+    end
 end
 
 return ai

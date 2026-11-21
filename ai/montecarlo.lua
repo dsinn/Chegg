@@ -1,4 +1,4 @@
--- Medium and Hard: flat Monte Carlo over the current decision.
+-- Flat Monte Carlo over the current decision (no level uses it now).
 --
 -- 1. Score every legal action with the greedy one-step evaluation and keep
 --    the best `candidates` of them (ending the turn is always kept).

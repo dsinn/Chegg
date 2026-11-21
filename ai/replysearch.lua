@@ -1,4 +1,4 @@
--- Hard: plan whole turns, then check how the opponent answers them.
+-- Medium (the strongest level): plan whole turns, then check how the opponent answers them.
 --
 -- 1. The turn's actions are searched in parallel (each worker takes a share
 --    of the possible first actions). From the best end-of-turn plans,
@@ -36,6 +36,10 @@ end
 
 -- An after-reply score at or below this means the reply wins the game.
 local LOST = -eval.WIN/2
+
+-- How much more the cautious candidate search fears its pieces being left
+-- in reach (see eval.cautiousScore).
+local CAUTION = 5
 
 local function sameAction(a, b)
     return a.k==b.k and a.card==b.card and a.x==b.x and a.y==b.y and a.fx==b.fx and a.fy==b.fy
@@ -104,30 +108,45 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
     local detSeed = rng:random(1, 1073741823)
 
     local parts = pool.size()
-    -- The turn's plans, best first, merged over the worker parts; with
-    -- `refutations`, scored against them (see jobs.refutedScore).
-    local function search(refutations)
+    -- The turn's plans, best first, merged over the worker parts, for each
+    -- search in `specs` (all run at once, so no worker idles between them):
+    -- with `refutations`, scored against them (see jobs.refutedScore); with
+    -- `caution`, by eval.cautiousScore.
+    local function search(specs)
         local searches = {}
         -- With spread, each part returns extra plans for the shortlist to choose from.
         local perPart = params.candidates*((params.spread or 0)>0 and 3 or 1)
-        for part=1, parts do
-            searches[part] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
-                beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
-                tactical=tacticalLevel(params.ownTactical, params), refutations=refutations}
-        end
-        local found, seen = {}, {}
-        for _, list in ipairs(pool.run(searches, ctx)) do
-            for _, c in ipairs(list) do
-                if not seen[c.endKey] then
-                    seen[c.endKey] = true
-                    found[#found+1] = c
-                end
+        for _, spec in ipairs(specs) do
+            for part=1, parts do
+                searches[#searches+1] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
+                    beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
+                    tactical=tacticalLevel(params.ownTactical, params), refutations=spec.refutations,
+                    caution=spec.caution}
             end
         end
-        table.sort(found, function(a, b) return a.score>b.score end)
-        return found
+        local results = pool.run(searches, ctx)
+        local out = {}
+        for s=1, #specs do
+            local found, seen = {}, {}
+            for part=1, parts do
+                for _, c in ipairs(results[(s-1)*parts+part]) do
+                    if not seen[c.endKey] then
+                        seen[c.endKey] = true
+                        found[#found+1] = c
+                    end
+                end
+            end
+            table.sort(found, function(a, b) return a.score>b.score end)
+            out[s] = found
+        end
+        return out
     end
-    local found = search(nil)
+    -- With `cautious`, also plans from a search that fears leaving pieces in
+    -- reach far more than the evaluation does, so a quiet turn gets weighed
+    -- against plans that all share a raid or an exposed piece.
+    local cautious = (params.cautious or 0)>0
+    local searched = search(cautious and {{}, {caution=CAUTION}} or {{}})
+    local found = searched[1]
     if found[1].score>=eval.WIN then
         return found[1].seq[1] or {k='end'}
     end
@@ -148,7 +167,19 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
             weighed[#weighed+1] = {cand=cands[i], score=r.score, reply=r.reply}
         end
     end
-    weigh(pickCandidates(found, params.candidates, params.spread))
+    local cands = pickCandidates(found, params.candidates, params.spread)
+    if cautious then
+        local known = {}
+        for _, c in ipairs(cands) do known[c.endKey] = true end
+        local extra = {}
+        for _, c in ipairs(searched[2]) do
+            if not known[c.endKey] then extra[#extra+1] = c end
+        end
+        for _, c in ipairs(pickCandidates(extra, params.cautious, params.spread)) do
+            cands[#cands+1] = c
+        end
+    end
+    weigh(cands)
 
     -- With `refute`, when every plan loses the game to its reply, search the
     -- turn again assuming the opponent plays those replies whenever they still
@@ -177,7 +208,7 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
             end
         end
         if #refutations==before then break end
-        weigh(pickCandidates(search(refutations), params.candidates, params.spread))
+        weigh(pickCandidates(search{{refutations=refutations}}[1], params.candidates, params.spread))
     end
 
     local best, bestScore

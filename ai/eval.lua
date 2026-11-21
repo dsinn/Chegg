@@ -49,13 +49,16 @@ function eval.typeValue(t)
     return v
 end
 
--- Weights by feature name, from chegg-headless's weights/patient-1.txt
+-- Weights by feature name, from chegg-headless's weights/frog55.txt
 -- (2026-11-20): tuned by self-play (SPSA with the turn planner,
 -- weights/spsa-exposed.txt), except the exposure weights (-3) and advance
 -- (-1, half the tuned pull forward; no cost against the AI), set by hand
 -- from games against a human. Self-play can't learn them: no AI opponent keeps
 -- its pieces out of reach and punishes whatever walks into it, which is how
--- people beat the computer.
+-- people beat the computer. The Frog is worth 55, not the tuned 27: the
+-- planner the weights were tuned with couldn't use it, and now that the AI
+-- plays frog combos (and people pull with it to set up half their kills),
+-- valuing it like a Skeleton is +48 Elo.
 eval.weights = {
     ['material.zombie'] = 29.5319,
     ['material.creeper'] = 28.1178,
@@ -63,7 +66,7 @@ eval.weights = {
     ['material.rabbit'] = 20.2823,
     ['material.pufferfish'] = 31.3145,
     ['material.golem'] = 37.7523,
-    ['material.frog'] = 27.1309,
+    ['material.frog'] = 55.0000,
     ['material.skeleton'] = 55.6210,
     ['material.blaze'] = 45.5208,
     ['material.phantom'] = 63.1713,
@@ -378,6 +381,36 @@ function eval.withoutExposure()
     for k, v in pairs(eval.weights) do w[k] = v end
     w.exposed_moving, w.exposed_waiting, w.exposed_undefended = 0, 0, 0
     return w
+end
+
+-- The cautious candidate search's score of `board` for `me` (at the end of
+-- its turn): the penalties for me's pieces left in reach (hanging or exposed
+-- while the opponent moves next) `factor` times stronger, and me's own
+-- material counted `factor` times too, so a piece stays worth more than its
+-- exposure and removing its own exposed piece never pays. For the reply
+-- search's cautious candidates (ai/replysearch.lua). Mirrors
+-- `cautious_score` in chegg-headless.
+local cautiousWeights = {}
+
+function eval.cautiousScore(board, me, factor)
+    local w = cautiousWeights[factor]
+    if not w then
+        w = {}
+        for k, v in pairs(eval.weights) do w[k] = v end
+        for _, k in ipairs{'hanging_waiting', 'exposed_waiting', 'exposed_undefended'} do
+            w[k] = w[k]*factor
+        end
+        cautiousWeights[factor] = w
+    end
+    local s = eval.score(board, me, 'opp', w)
+    if math.abs(s)>=eval.WIN then return s end
+    local own = 0
+    for _, pc in ipairs(me.summons) do
+        if pc:isAlive() and pc.type~='king' then
+            own = own+(eval.weights['material.'..pc.type] or 0)
+        end
+    end
+    return s+(factor-1)*own
 end
 
 -- Maps a score into (-1, 1) for averaging simulation results.
