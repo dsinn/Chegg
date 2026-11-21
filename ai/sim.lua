@@ -203,6 +203,27 @@ function sim.captureActions(board, player, x, y)
     return acts
 end
 
+-- Every move and attack of `player`'s piece on square (x, y), classified as
+-- in sim.actions. For the turn search's setup follow-ups (ai/turnsearch.lua).
+function sim.pieceActions(board, player, x, y)
+    local acts = {}
+    if player.dead or not board:isActivePlayer(player) then return acts end
+    local pc = board:getLivingPieceAt(x, y)
+    if not pc or pc.player~=player or not (pc:canMove() or pc:canSpecial()) then return acts end
+    local cols, rows = board.cols, board.rows
+    local r = math.max(pc.moveRange or 0, pc.attackRange or 0)
+    for ty=math.max(1, y-r), math.min(rows, y+r) do
+        for tx=math.max(1, x-r), math.min(cols, x+r) do
+            if pc:canTravelTo(tx, ty) then
+                acts[#acts+1] = {k='move', fx=x, fy=y, x=tx, y=ty}
+            elseif pc:canAttackTo(tx, ty) then
+                acts[#acts+1] = {k='attack', fx=x, fy=y, x=tx, y=ty}
+            end
+        end
+    end
+    return acts
+end
+
 -- Applies `action` for `player` through the normal game functions.
 -- Returns true if it was legal and happened.
 function sim.apply(board, player, action)

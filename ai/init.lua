@@ -40,6 +40,12 @@ ai.__index = ai
 --                then shoot" are seen even when the step alone looks idle.
 --   ownTactical  reply only: the same extension in the search over the AI's
 --                own turn.
+--   setups       with tactical/ownTactical: the extension also follows a
+--                setup (a frog's pull, a parrot's copy) with the kills it
+--                makes possible, by any piece in reach, so "pull, then hit
+--                with another piece" is seen too.
+--   vacate       with setups: also a frog's pull through a square one of the
+--                mover's pieces just left (clearing the frog's line first).
 --   replySummons minimax only: false leaves the opponent's summons out of
 --                its reply (a Wither's still in: its summon explodes), so
 --                the reply search spends its depth on captures.
@@ -67,6 +73,8 @@ ai.levels = {
         minimax = true,
         tactical = true,
         ownTactical = true,
+        setups = true,
+        vacate = true,
         replySummons = false,
         actionDelay = 0.3,
     },
@@ -75,7 +83,9 @@ ai.levels = {
 -- The computer's decks: a varied pool of strong decks, one picked at random
 -- each game. Found by a MAP-Elites deck search in chegg-headless (the best deck
 -- for each pair of most-used minions, 2026-11-20); the comment on each is its
--- win rate for the planner against random decks.
+-- win rate for the planner against random decks. The two Creeper swarms it
+-- also found (10-11 Creepers) were dropped after playtesting: they beat random
+-- decks but do nothing against a player who keeps out of reach.
 ai.decks = {
     {'zombie', 'zombie', 'zombie', 'zombie', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'box'}, -- 87%
     {'zombie', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'golem', 'golem', 'skeleton', 'skeleton', 'blaze', 'blaze', 'phantom'}, -- 87%
@@ -86,8 +96,6 @@ ai.decks = {
     {'zombie', 'zombie', 'zombie', 'zombie', 'zombie', 'pig', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'}, -- 83%
     {'zombie', 'zombie', 'pig', 'pufferfish', 'golem', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'phantom', 'phantom', 'phantom', 'parrot'}, -- 83%
     {'creeper', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander', 'farlander'}, -- 82%
-    {'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pig', 'golem', 'blaze', 'wither'}, -- 82%
-    {'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'rabbit', 'golem', 'frog', 'phantom', 'farlander'}, -- 81%
     {'creeper', 'pufferfish', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'phantom', 'phantom', 'phantom'}, -- 81%
 }
 

@@ -25,6 +25,15 @@ local jobs       = require'ai.jobs'
 
 local replysearch = {}
 
+-- The turn search's tactical level (see turnsearch.search): 0 off, 1
+-- follow-up kills by the same piece, 2 also the kills setups make possible,
+-- 3 also pulls through a square just vacated.
+local function tacticalLevel(on, params)
+    if not on then return 0 end
+    if params.vacate then return 3 end
+    return params.setups and 2 or 1
+end
+
 local function sameAction(a, b)
     return a.k==b.k and a.card==b.card and a.x==b.x and a.y==b.y and a.fx==b.fx and a.fy==b.fy
 end
@@ -98,7 +107,7 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
     for part=1, parts do
         searches[part] = {kind='candidates', snap=snap, detSeed=detSeed, me=idx,
             beam=params.beam, depth=params.depth, k=perPart, part=part, parts=parts,
-            tactical=params.ownTactical}
+            tactical=tacticalLevel(params.ownTactical, params)}
     end
     local found, seen = {}, {}
     for _, list in ipairs(pool.run(searches, ctx)) do
@@ -120,7 +129,7 @@ function replysearch.choose(board, me, params, ctx, rng, memory)
         replies[i] = {kind='reply', snap=snap, detSeed=detSeed, me=idx, seq=c.seq,
             samples=params.samples, seed=rng:random(1, 1073741823),
             replyBeam=params.replyBeam, replyDepth=params.replyDepth, minimax=params.minimax,
-            guided=params.guided, tactical=params.tactical,
+            guided=params.guided, tactical=tacticalLevel(params.tactical, params),
             replySummons=params.replySummons}
     end
     local best, bestScore

@@ -8,7 +8,7 @@
 --       actions) and returns the best k end-of-turn plans:
 --       {{seq, endKey, foot, score}, ...}, where foot lists where `me`'s
 --       pieces end up (sorted 'x,y,type' strings, for candidate diversity).
---       `tactical` adds the turn search's tactical extension.
+--       `tactical` is the turn search's tactical level (0 to 3).
 --   {kind='reply', snap, detSeed, me, seq, samples, seed, replyBeam, replyDepth, minimax, guided, tactical,
 --    replySummons}
 --       Rebuilds the same re-dealt position (same detSeed), plays `seq`, ends
@@ -88,8 +88,8 @@ end
 -- are ranked by the damage they set up against players[meIdx] (its full
 -- evaluation, negated) rather than by the opponent's own evaluation, so a
 -- set-up like a frog pull before the kill survives the beam. With
--- job.tactical, the search also tries each action with every follow-up
--- capture (see turnsearch.search); with job.replySummons == false, the
+-- job.tactical (a level), the search also tries each action with follow-up
+-- captures (see turnsearch.search); with job.replySummons == false, the
 -- opponent doesn't summon (a Wither still may).
 local function minimaxReply(c, meIdx, opp, job, ctx, leafWeights)
     local scorer
