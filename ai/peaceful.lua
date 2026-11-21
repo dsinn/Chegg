@@ -1,9 +1,10 @@
 -- Peaceful: a training opponent that never fights. Greedy over single
 -- actions, like the old Easy. It keeps its villager (king) as far from enemy
 -- pieces as it can get, and walks its minions up to the other player's
--- minions (or to their villager once they have none), so there is always
--- something to practise on. It never attacks, and never takes a move that
--- kills anything, its own pieces included (a Phantom's or Slime's
+-- minions (or to their villager once they have none), aiming to stand right
+-- beside them rather than diagonally (straight-line distance), so there is
+-- always something to practise on. It never attacks, and never takes a move
+-- that kills anything, its own pieces included (a Phantom's or Slime's
 -- attack-move). It ends its turn once nothing improves on standing still.
 
 local sim = require'ai.sim'
@@ -12,12 +13,19 @@ local peaceful = {}
 
 local KING_WEIGHT = 10   -- per square between the villager and the nearest enemy
 local KING_CAP = 8       -- distances beyond this count as safe enough
-local HUG_WEIGHT = 2     -- per square a minion is closer than HUG_CAP to its target
-local HUG_CAP = 10       -- more than the board's widest distance, so this stays >= 0
+local HUG_WEIGHT = 2     -- per square (straight-line) a minion is closer than HUG_CAP to its target
+local HUG_CAP = 12       -- more than the board's longest diagonal, so this stays >= 0
 local MINION_BONUS = 5   -- per own minion on the board, so it keeps summoning
 
 local function cheb(a, b)
     return math.max(math.abs(a.pos[1]-b.pos[1]), math.abs(a.pos[2]-b.pos[2]))
+end
+
+-- Straight-line distance, so a minion beside its target (1) beats one
+-- diagonally next to it (1.41).
+local function euclid(a, b)
+    local dx, dy = a.pos[1]-b.pos[1], a.pos[2]-b.pos[2]
+    return math.sqrt(dx*dx+dy*dy)
 end
 
 local function living(player)
@@ -52,7 +60,7 @@ function peaceful.score(board, me)
             s = s+KING_WEIGHT*d
         else
             local d = HUG_CAP
-            for _, e in ipairs(targets) do d = math.min(d, cheb(pc, e)) end
+            for _, e in ipairs(targets) do d = math.min(d, euclid(pc, e)) end
             s = s+MINION_BONUS+HUG_WEIGHT*(HUG_CAP-d)
         end
     end
