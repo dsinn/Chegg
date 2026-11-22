@@ -3,7 +3,8 @@ local activeMode
 -- Launch options, after the game folder:
 --   --turns   show the raw turn number used by the AI's game logs ('log turn N'),
 --             to refer to moments when studying them (ai/gamelog.lua)
---   --deck X  the computer's deck, instead of a random one from ai.decks:
+--   --deck X  the computer's deck, instead of a random one from its level's pool
+--             (ai.decks for Medium, ai.easyDecks for Easy and Peaceful):
 --             a number (that deck of the pool), a card name (a random pool deck
 --             holding it, e.g. --deck sniffer), or 15 comma-separated cards
 LaunchOptions = {}

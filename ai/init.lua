@@ -110,25 +110,87 @@ ai.levels = {
 -- one frog or none (Farlander/Phantom 56%, Skeleton/Phantom/Parrot 39%,
 -- Golem/Wither/Parrot 32%). The Cat and Sniffer decks swap those two in for
 -- the weakest cards; they pay off against a player who holds back.
+-- On 2026-11-22 the zombie swarms (now Easy's) and the ten-Skeleton deck gave
+-- way to four Skeleton/frog decks chosen by the user: 10+5 and 8+7, and 6+4
+-- and 7+3 filled out from the best-rated fillers (in a separate 200-game run
+-- where the first deck below scored 87%: 6+4 with 2 Golems and 3 Phantoms
+-- 96.5%, 7+3 with 3 Golems, a Cat and a Sniffer 91%), then a Slime swapped
+-- in for a Phantom and for two Golems respectively.
 ai.decks = {
     {'creeper', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander', 'farlander'}, -- 99%
     {'cat', 'sniffer', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander'}, -- 92%
     {'cat', 'sniffer', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
     {'zombie', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
-    {'zombie', 'zombie', 'zombie', 'zombie', 'zombie', 'pig', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'}, -- 83%
-    {'zombie', 'zombie', 'zombie', 'zombie', 'cat', 'sniffer', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'}, -- 81%
-    {'zombie', 'creeper', 'golem', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'}, -- 80%
+    {'golem', 'golem', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'slime'},
+    {'cat', 'sniffer', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'slime'},
+    {'frog', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'},
+    {'frog', 'frog', 'frog', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'},
     {'creeper', 'pufferfish', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'phantom', 'phantom', 'phantom'}, -- 80%
 }
+
+-- Easy's (and Peaceful's) decks: Medium's decks (added below), the swarms
+-- Medium dropped, and themed decks for fun rather than strength. A quarter of
+-- their games use a mixed deck instead (ai.mixedDeck below).
+ai.easyDecks = {
+    -- zombie swarms
+    {'zombie', 'zombie', 'zombie', 'zombie', 'zombie', 'pig', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'},
+    {'zombie', 'zombie', 'zombie', 'zombie', 'cat', 'sniffer', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'},
+    -- creeper swarms
+    {'zombie', 'zombie', 'zombie', 'zombie', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'box'},
+    {'zombie', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pufferfish', 'pufferfish', 'golem', 'golem', 'skeleton', 'skeleton', 'blaze', 'blaze', 'phantom'},
+    {'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'creeper', 'pufferfish', 'golem', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'slime', 'wither'},
+    -- The End: Endermen, Phantoms and Shulkers
+    {'farlander', 'farlander', 'farlander', 'farlander', 'farlander', 'phantom', 'phantom', 'phantom', 'phantom', 'phantom', 'box', 'box', 'box', 'box', 'box'},
+    -- The Nether: Blazes, Withers and (wither) Skeletons
+    {'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'blaze', 'blaze', 'blaze', 'blaze', 'wither', 'wither', 'wither'},
+    -- Swamp: Frogs, Slimes and Pufferfish
+    {'pufferfish', 'pufferfish', 'pufferfish', 'pufferfish', 'pufferfish', 'frog', 'frog', 'frog', 'frog', 'frog', 'slime', 'slime', 'slime', 'slime', 'slime'},
+}
+
+-- Easy and Peaceful also play Medium's decks.
+for _, d in ipairs(ai.decks) do table.insert(ai.easyDecks, 1, d) end
+
+ai.deckPools = {peaceful = ai.easyDecks, easy = ai.easyDecks, medium = ai.decks}
+
+-- How often Easy (and Peaceful) play a mixed deck instead of a pool deck.
+ai.MIXED_DECK_CHANCE = 0.25
+
+-- How often Peaceful plays an animal farm: each of its 15 cards drawn
+-- uniformly at random from these animals.
+ai.FARM_DECK_CHANCE = 0.25
+ai.farmAnimals = {'pig', 'rabbit', 'cat', 'sniffer', 'parrot'}
+
+function ai.farmDeck()
+    local deck = {}
+    for i = 1, 15 do deck[i] = ai.farmAnimals[love.math.random(1, #ai.farmAnimals)] end
+    return deck
+end
+
+-- A deck with at most one of each minion: 15 of the 17 deck cards, at random.
+function ai.mixedDeck()
+    local kinds = {}
+    for name, data in pairs(require'pieces'.getTypesData()) do
+        if data.deck then kinds[#kinds+1] = name end
+    end
+    table.sort(kinds)
+    for i = #kinds, 2, -1 do
+        local j = love.math.random(1, i)
+        kinds[i], kinds[j] = kinds[j], kinds[i]
+    end
+    local deck = {}
+    for i = 1, math.min(15, #kinds) do deck[i] = kinds[i] end
+    return deck
+end
 
 -- A deck from a `--deck` launch option (see main.lua), or nil and a reason:
 -- a number picks that deck of ai.decks; a card name picks at random among
 -- the decks holding it; 15 comma-separated card names are the deck itself.
-function ai.deckFromOption(spec)
+function ai.deckFromOption(spec, pool)
+    pool = pool or ai.decks
     local n = tonumber(spec)
     if n then
-        if ai.decks[n] then return table.copy(ai.decks[n]) end
-        return nil, ('there are only %d decks'):format(#ai.decks)
+        if pool[n] then return table.copy(pool[n]) end
+        return nil, ('there are only %d decks'):format(#pool)
     end
     local Piece = require'pieces'
     local function card(name)
@@ -148,23 +210,33 @@ function ai.deckFromOption(spec)
     local name = spec:lower()
     if not card(name) then return nil, ("'%s' isn't a deck card"):format(spec) end
     local holding = {}
-    for _, d in ipairs(ai.decks) do
+    for _, d in ipairs(pool) do
         for _, c in ipairs(d) do
             if c==name then holding[#holding+1] = d break end
         end
     end
-    if #holding==0 then return nil, ('no deck holds a %s'):format(name) end
+    if #holding==0 then return nil, ('no deck in this pool holds a %s'):format(name) end
     return table.copy(holding[love.math.random(1, #holding)])
 end
 
-function ai.randomDeck()
+-- A deck for an AI of the given level: the --deck launch option if it names
+-- one, otherwise a random deck from that level's pool (for Easy and Peaceful,
+-- sometimes a mixed deck instead; for Peaceful, sometimes an animal farm).
+function ai.randomDeck(level)
+    local pool = ai.deckPools[level] or ai.decks
     local spec = LaunchOptions and LaunchOptions.aiDeck
     if spec then
-        local deck, why = ai.deckFromOption(spec)
+        local deck, why = ai.deckFromOption(spec, pool)
         if deck then return deck end
         print(('--deck %s ignored: %s'):format(spec, why))
     end
-    return table.copy(ai.decks[love.math.random(1, #ai.decks)])
+    if level=='peaceful' and love.math.random()<ai.FARM_DECK_CHANCE then
+        return ai.farmDeck()
+    end
+    if pool==ai.easyDecks and love.math.random()<ai.MIXED_DECK_CHANCE then
+        return ai.mixedDeck()
+    end
+    return table.copy(pool[love.math.random(1, #pool)])
 end
 
 local SLICE = 0.012       -- seconds of thinking per frame
