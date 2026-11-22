@@ -47,9 +47,9 @@ function menu:new()
             seed = love.math.random(1, 9999999),
         })
     end
-    for i, level in ipairs{'peaceful', 'easy', 'medium'} do
+    for i, level in ipairs{'peaceful', 'easy', 'medium', 'hard'} do
         table.insert(self.activepreview.buttons, {
-            xy = function() return love.graphics.getWidth()/2-215+(i-1)*145, love.graphics.getHeight()/2+165 end,
+            xy = function() return love.graphics.getWidth()/2-288+(i-1)*145, love.graphics.getHeight()/2+165 end,
             widthheight = function() return 140, 60 end,
             press = function() startVsComputer(level) end,
             text = level,

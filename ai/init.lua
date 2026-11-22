@@ -96,41 +96,26 @@ ai.levels = {
     },
 }
 
--- The computer's decks: a varied pool of strong decks, one picked at random
--- each game. Most were found by a MAP-Elites deck search in chegg-headless
--- (the best deck for each pair of most-used minions, 2026-11-20). On
--- 2026-11-21 the pool was rebuilt around frogs after playtesting: Medium's
--- frog pulls set up its ranged attackers (Skeletons, Blazes) and Phantoms,
--- and the decks without them win far less. The Creeper-heavy rushes (3 to 11
--- Creepers) were dropped: against a player who keeps out of reach they can
--- only attack by walking into range, and frog-and-ranged decks beat every
--- one of them 98-100% with Medium. The comment on each deck is Medium's win
--- rate against random decks (reply 8:10:12 with weights/trade20-econ.txt, 50
--- games each, `decks rate`; about +-7%). Dropped with them: three decks with
--- one frog or none (Farlander/Phantom 56%, Skeleton/Phantom/Parrot 39%,
--- Golem/Wither/Parrot 32%). The Cat and Sniffer decks swap those two in for
--- the weakest cards; they pay off against a player who holds back.
--- On 2026-11-22 the zombie swarms (now Easy's) and the ten-Skeleton deck gave
--- way to four Skeleton/frog decks chosen by the user: 10+5 and 8+7, and 6+4
--- and 7+3 filled out from the best-rated fillers (in a separate 200-game run
--- where the first deck below scored 87%: 6+4 with 2 Golems and 3 Phantoms
--- 96.5%, 7+3 with 3 Golems, a Cat and a Sniffer 91%), then a Slime swapped
--- in for a Phantom and for two Golems respectively.
-ai.decks = {
-    {'creeper', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander', 'farlander'}, -- 99%
-    {'cat', 'sniffer', 'golem', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'farlander'}, -- 92%
-    {'cat', 'sniffer', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
-    {'zombie', 'zombie', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze'}, -- 91%
-    {'golem', 'golem', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'phantom', 'slime'},
-    {'cat', 'sniffer', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'phantom', 'slime'},
-    {'frog', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'},
-    {'frog', 'frog', 'frog', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton'},
-    {'creeper', 'pufferfish', 'golem', 'golem', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'blaze', 'blaze', 'blaze', 'phantom', 'phantom', 'phantom'}, -- 80%
-}
+-- Hard plays like Medium; what sets it apart is its deck (ai.hardDeck).
+ai.levels.hard = {}
+for k, v in pairs(ai.levels.medium) do ai.levels.hard[k] = v end
 
--- Easy's (and Peaceful's) decks: Medium's decks (added below), the swarms
--- Medium dropped, and themed decks for fun rather than strength. A quarter of
--- their games use a mixed deck instead (ai.mixedDeck below).
+-- The computer's decks.
+--
+-- Hard always builds its deck: 6 frogs, 6 Skeletons, a Wither and a Parrot,
+-- plus one minion drawn uniformly from all 17 (it can be another of those
+-- four). An overnight search on 2026-11-22 (`decks probe` in chegg-headless,
+-- 106 Skeleton+frog decks against the earlier Medium pool) found the strongest
+-- decks were 5-8 Skeletons and 5-7 frogs with 1-3 Parrots and Withers; the
+-- best, 6 frogs, 6 Skeletons, a Parrot and 2 Withers, won 92.8%.
+-- Medium builds Hard's deck half the time and a mixed deck otherwise.
+-- Easy and Peaceful pick from ai.easyDecks, or a quarter of the time a mixed
+-- deck; a quarter of Peaceful's games are an animal farm instead.
+-- The earlier fixed Medium decks (frog-and-ranged decks from a MAP-Elites
+-- search and the Skeleton/frog decks) were retired on 2026-11-22.
+
+-- Easy's (and Peaceful's) decks: swarms, and themed decks for fun rather
+-- than strength.
 ai.easyDecks = {
     -- zombie swarms
     {'zombie', 'zombie', 'zombie', 'zombie', 'zombie', 'pig', 'pufferfish', 'frog', 'frog', 'skeleton', 'skeleton', 'phantom', 'phantom', 'phantom', 'slime'},
@@ -147,18 +132,28 @@ ai.easyDecks = {
     {'pufferfish', 'pufferfish', 'pufferfish', 'pufferfish', 'pufferfish', 'frog', 'frog', 'frog', 'frog', 'frog', 'slime', 'slime', 'slime', 'slime', 'slime'},
 }
 
--- Easy and Peaceful also play Medium's decks.
-for _, d in ipairs(ai.decks) do table.insert(ai.easyDecks, 1, d) end
-
-ai.deckPools = {peaceful = ai.easyDecks, easy = ai.easyDecks, medium = ai.decks}
+-- The fixed decks (chegg-headless's parity tests deal from these).
+ai.decks = ai.easyDecks
 
 -- How often Easy (and Peaceful) play a mixed deck instead of a pool deck.
 ai.MIXED_DECK_CHANCE = 0.25
+-- How often Medium builds Hard's deck instead of a mixed deck.
+ai.MEDIUM_HARD_DECK_CHANCE = 0.5
 
 -- How often Peaceful plays an animal farm: each of its 15 cards drawn
 -- uniformly at random from these animals.
 ai.FARM_DECK_CHANCE = 0.25
 ai.farmAnimals = {'pig', 'rabbit', 'cat', 'sniffer', 'parrot'}
+
+-- The 17 minions a deck can hold, in a fixed order.
+local function deckKinds()
+    local kinds = {}
+    for name, data in pairs(require'pieces'.getTypesData()) do
+        if data.deck then kinds[#kinds+1] = name end
+    end
+    table.sort(kinds)
+    return kinds
+end
 
 function ai.farmDeck()
     local deck = {}
@@ -168,11 +163,7 @@ end
 
 -- A deck with at most one of each minion: 15 of the 17 deck cards, at random.
 function ai.mixedDeck()
-    local kinds = {}
-    for name, data in pairs(require'pieces'.getTypesData()) do
-        if data.deck then kinds[#kinds+1] = name end
-    end
-    table.sort(kinds)
+    local kinds = deckKinds()
     for i = #kinds, 2, -1 do
         local j = love.math.random(1, i)
         kinds[i], kinds[j] = kinds[j], kinds[i]
@@ -182,11 +173,22 @@ function ai.mixedDeck()
     return deck
 end
 
+-- Hard's deck: 6 frogs, 6 Skeletons, a Wither, a Parrot and one minion drawn
+-- uniformly from all of them.
+ai.hardCore = {'frog', 'frog', 'frog', 'frog', 'frog', 'frog', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'skeleton', 'wither', 'parrot'}
+
+function ai.hardDeck()
+    local deck = table.copy(ai.hardCore)
+    local kinds = deckKinds()
+    deck[#deck+1] = kinds[love.math.random(1, #kinds)]
+    return deck
+end
+
 -- A deck from a `--deck` launch option (see main.lua), or nil and a reason:
--- a number picks that deck of ai.decks; a card name picks at random among
--- the decks holding it; 15 comma-separated card names are the deck itself.
-function ai.deckFromOption(spec, pool)
-    pool = pool or ai.decks
+-- a number picks that deck of ai.easyDecks; a card name picks at random among
+-- the easyDecks holding it; 15 comma-separated card names are the deck itself.
+function ai.deckFromOption(spec)
+    local pool = ai.easyDecks
     local n = tonumber(spec)
     if n then
         if pool[n] then return table.copy(pool[n]) end
@@ -215,28 +217,31 @@ function ai.deckFromOption(spec, pool)
             if c==name then holding[#holding+1] = d break end
         end
     end
-    if #holding==0 then return nil, ('no deck in this pool holds a %s'):format(name) end
+    if #holding==0 then return nil, ('no Easy deck holds a %s'):format(name) end
     return table.copy(holding[love.math.random(1, #holding)])
 end
 
 -- A deck for an AI of the given level: the --deck launch option if it names
--- one, otherwise a random deck from that level's pool (for Easy and Peaceful,
--- sometimes a mixed deck instead; for Peaceful, sometimes an animal farm).
+-- one, otherwise the level's own choice (see the top of this section).
 function ai.randomDeck(level)
-    local pool = ai.deckPools[level] or ai.decks
     local spec = LaunchOptions and LaunchOptions.aiDeck
     if spec then
-        local deck, why = ai.deckFromOption(spec, pool)
+        local deck, why = ai.deckFromOption(spec)
         if deck then return deck end
         print(('--deck %s ignored: %s'):format(spec, why))
+    end
+    if level=='hard' then return ai.hardDeck() end
+    if level=='medium' then
+        if love.math.random()<ai.MEDIUM_HARD_DECK_CHANCE then return ai.hardDeck() end
+        return ai.mixedDeck()
     end
     if level=='peaceful' and love.math.random()<ai.FARM_DECK_CHANCE then
         return ai.farmDeck()
     end
-    if pool==ai.easyDecks and love.math.random()<ai.MIXED_DECK_CHANCE then
+    if love.math.random()<ai.MIXED_DECK_CHANCE then
         return ai.mixedDeck()
     end
-    return table.copy(pool[love.math.random(1, #pool)])
+    return table.copy(ai.easyDecks[love.math.random(1, #ai.easyDecks)])
 end
 
 local SLICE = 0.012       -- seconds of thinking per frame
