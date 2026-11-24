@@ -1,6 +1,10 @@
 local game = {}
 game.__index = game
 
+-- EnetHandle/EnetDisconnect are called every frame and from the end screen;
+-- games against the computer skip the lobby, which used to load these.
+require'enet.handlers'
+
 function game:new()
     setmetatable(self, game)
 
@@ -27,6 +31,7 @@ function game:new()
                         opponentType = self.activeboard.othertype,
                         opponentDeck = self.otherplayer.startingDeck,
                         seed = self.seed,
+                        aiLevel = self.aiLevel,
                         rng = self.rng,
                     })
                     if self.activeboard.othertype=='remote' then
@@ -49,7 +54,13 @@ function game:new()
         end
     end
 
-    self.rng = self.rng or love.math.newRandomGenerator(self.seed)
+    -- Games against the computer use Park-Miller (ai/rng.lua), so their logs
+    -- (ai/gamelog.lua) replay exactly.
+    if self.opponentType=='ai' then
+        self.rng = self.rng or require'ai.rng'.new(self.seed)
+    else
+        self.rng = self.rng or love.math.newRandomGenerator(self.seed)
+    end
 
     self.localplayer = require'player'.new{
         deck = self.deck,
@@ -82,6 +93,12 @@ function game:new()
         otherplayer = self.otherplayer,
         othertype = self.opponentType,
     }
+    if self.opponentType=='ai' and self.otherplayer then
+        self.ai = require'ai'.new(self.aiLevel, self.activeboard, self.otherplayer)
+        local gamelog = require'ai.gamelog'
+        gamelog.attach(self.activeboard, self.rng, {[self.otherplayer] = self.ai.level},
+            gamelog.toFile(self.ai.level), love.timer.getTime)
+    end
     self.opponentType = nil
 
     self.activepreview = require'preview'.new{
@@ -132,6 +149,9 @@ function game:update(delta)
     if self.activeboard then
         self.activeboard:update(delta)
     end
+    if self.ai then
+        self.ai:update(delta)
+    end
     EnetHandle(function(data)
         if data=='MSG: disconnected' then
             self.otherDisconnected = true
@@ -167,6 +187,7 @@ function game:update(delta)
                 opponentType = self.activeboard.othertype,
                 opponentDeck = self.otherplayer.startingDeck,
                 seed = self.seed,
+                aiLevel = self.aiLevel,
                 rng = self.rng,
             })
         elseif data=='ENDTURN' then
@@ -233,6 +254,14 @@ function game:draw()
     if self.otherpreview  then self.otherpreview:draw()  end
     if self.activepreview then self.activepreview:draw() end
     love.graphics.setColor(0,0,0)
+    if self.ai and self.ai:isThinking() then
+        love.graphics.printf('thinking', text, love.graphics.getWidth()-250, 160, 100, 'center', 0, 2, 2)
+    end
+    if LaunchOptions and LaunchOptions.showLogTurns and self.activeboard then
+        -- The turn as game logs number it (each player's turn counts), small, top right.
+        love.graphics.printf(('log turn %d'):format(self.activeboard.turn), text,
+            love.graphics.getWidth()-250, 120, 200, 'center', 0, 1, 1)
+    end
     if self.otherplayer and self.otherplayer.dead and not self.localplayer.dead then
         love.graphics.printf('you win!?', text, 0, 100, love.graphics.getWidth()/2, 'center', 0, 2, 2)
     elseif self.otherplayer and self.otherplayer.dead and self.localplayer.dead then

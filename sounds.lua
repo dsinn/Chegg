@@ -113,7 +113,11 @@ local soundfiles = {
 
 sounds = {}
 
+-- Set while the AI simulates moves, so hypothetical turns stay silent.
+sounds.muted = false
+
 function sounds.play(name, volume, pitch)
+    if sounds.muted then return end
     local soundData = soundfiles[name]
     if not soundData then return end
     if soundData then

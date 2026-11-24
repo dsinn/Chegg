@@ -1,6 +1,14 @@
 local activeMode
 
-function love.load()
+-- Launch options, after the game folder:
+--   --turns   show the raw turn number used by the AI's game logs ('log turn N'),
+--             to refer to moments when studying them (ai/gamelog.lua)
+LaunchOptions = {}
+
+function love.load(args)
+    for _, a in ipairs(args or {}) do
+        if a=='--turns' then LaunchOptions.showLogTurns = true end
+    end
     require'utils'
     require'sounds'
 
