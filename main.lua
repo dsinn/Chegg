@@ -3,11 +3,17 @@ local activeMode
 -- Launch options, after the game folder:
 --   --turns   show the raw turn number used by the AI's game logs ('log turn N'),
 --             to refer to moments when studying them (ai/gamelog.lua)
+--   --deck X  the computer's deck at any level, instead of the one it would
+--             build or pick: a number (that deck of ai.easyDecks), a card name
+--             (a random Easy deck holding it, e.g. --deck wither), or 15
+--             comma-separated cards
 LaunchOptions = {}
 
 function love.load(args)
-    for _, a in ipairs(args or {}) do
+    args = args or {}
+    for i, a in ipairs(args) do
         if a=='--turns' then LaunchOptions.showLogTurns = true end
+        if a=='--deck' then LaunchOptions.aiDeck = args[i+1] end
     end
     require'utils'
     require'sounds'

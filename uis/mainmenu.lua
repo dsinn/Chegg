@@ -47,7 +47,7 @@ function menu:new()
             deck = love.filesystem.load'decks/deck.lua'(),
             isStartingPlayer = love.math.random(1, 2)==1,
             opponentType = 'ai',
-            opponentDeck = require'ai'.randomDeck(),
+            opponentDeck = require'ai'.randomDeck(level),
             aiLevel = level,
             seed = love.math.random(1, 9999999),
         })
