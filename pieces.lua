@@ -864,19 +864,25 @@ function piece:new()
     return self
 end
 
-function piece:canMove()
-    if self:hasSummoningSickness() then return end
-    return (self.typeData.moveCost and self.typeData.moveCost<=self.player.mana) and (not self.lastMoved or self.lastMoved<self.board.turn) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
+-- The can* checks below test the mana cost against the player's mana unless
+-- ignoreMana is set, which asks whether the action would be possible with enough.
+local function affords(self, cost, ignoreMana)
+    return cost and (ignoreMana or cost<=self.player.mana)
 end
 
-function piece:canDash()
+function piece:canMove(ignoreMana)
     if self:hasSummoningSickness() then return end
-    return (self.typeData.dashCost and self.typeData.dashCost<=self.player.mana) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
+    return affords(self, self.typeData.moveCost, ignoreMana) and (not self.lastMoved or self.lastMoved<self.board.turn) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
 end
 
-function piece:canAttack()
+function piece:canDash(ignoreMana)
     if self:hasSummoningSickness() then return end
-    return (self.attackCost and self.attackCost<=self.player.mana) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
+    return affords(self, self.typeData.dashCost, ignoreMana) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
+end
+
+function piece:canAttack(ignoreMana)
+    if self:hasSummoningSickness() then return end
+    return affords(self, self.attackCost, ignoreMana) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
 end
 
 function piece:canSpecial()
@@ -884,13 +890,30 @@ function piece:canSpecial()
     return ((self.typeData.dashCost and self.typeData.dashCost<=self.player.mana) or (self.attackCost and self.attackCost<=self.player.mana)) and (not self.lastSpecialed or self.lastSpecialed<self.board.turn)
 end
 
-function piece:canTravelTo(targetX, targetY)
+function piece:canTravelTo(targetX, targetY, ignoreMana)
     if self.dead then return end
     if not self.board:isActivePlayer(self.player) then return end
-    if not (self:canMove() or self:canDash()) then return end
+    if not (self:canMove(ignoreMana) or self:canDash(ignoreMana)) then return end
     if self.pos[1]==targetX and self.pos[2]==targetY then return end
-    if not self:canAttack() and self.board:getLivingPieceAt(targetX, targetY) then return end
+    if not self:canAttack(ignoreMana) and self.board:getLivingPieceAt(targetX, targetY) then return end
     return self.typeData.canTravelTo(self, targetX, targetY)
+end
+
+-- The mana spent by dragging this piece onto the tile, mirroring what
+-- board:movePiece and board:attackWithPiece would do there, whether or not the
+-- player can currently afford it. Nil when no such action exists.
+function piece:getActionCost(targetX, targetY)
+    if self:canTravelTo(targetX, targetY, true) then
+        local data = self.typeData
+        local cost = (self:canMove() and data.moveCost) or (self:canDash() and data.dashCost)
+            or (self:canMove(true) and data.moveCost) or data.dashCost
+        if not self.move and self.board:getLivingPieceAt(targetX, targetY) then
+            cost = cost+(self.attackCost or 0)
+        end
+        return cost
+    elseif self:canAttackTo(targetX, targetY, true) and self.board:getLivingPieceAt(targetX, targetY) then
+        return self.attackCost or 0
+    end
 end
 
 function piece:onMoveTo(targetX, targetY)
@@ -907,11 +930,11 @@ function piece:onMoveTo(targetX, targetY)
     sounds.play(self.typeData.soundMove, 1, 0.95+0.1*love.math.random())
 end
 
-function piece:canAttackTo(targetX, targetY)
+function piece:canAttackTo(targetX, targetY, ignoreMana)
     if self.dead then return end
     if not self.board:isActivePlayer(self.player) then return end
     if self.attackMove then return end
-    if not (self:canAttack()) then return end
+    if not (self:canAttack(ignoreMana)) then return end
     if not self.attackRange or self.attackRange==0 then return end
     if self.pos[1]==targetX and self.pos[2]==targetY then return end
     return self.typeData.canAttackTo and self.typeData.canAttackTo(self, targetX, targetY)

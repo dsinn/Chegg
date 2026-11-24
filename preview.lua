@@ -268,7 +268,7 @@ function preview:mousepressed(x, y, button, istouch, presses, intercepted)
         self:sendData(('PREVIEW PRESS: %s'):format(tostring(handPressIndex)))
     end
     if handPressIndex then
-        self.board:setHighlightSpawnFor(self.player)
+        self.board:setHighlightSpawnFor(self.player, self.getHand()[handPressIndex])
         return true
     end
     for i, v in ipairs(self.buttons) do

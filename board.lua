@@ -83,7 +83,30 @@ local white, black = {0.8,0.8,0.8}, {0.2,0.2,0.2}
 local gridSize = 50
 local highlightBorder = 2
 
+-- Mana cost shown in the hovered tile's lower right: one hex per mana, a blue
+-- one if it is covered and a black one if it is missing.
+local manaCostQuad, manaMissingQuad = genQuad(10, 7), genQuad(10, 9)
+local manaCostSpacing = 12
+-- The hex fills x 15-34, y 14-35 of its 50px cell; this origin puts its lower
+-- right corner 2px inside the tile's.
+local manaCostOriginX, manaCostOriginY = 37, 38
+
 local selectedPiece, dragWithPiece, hoverAttackHighlight
+
+-- The mana the local player would spend acting on the hovered tile (dropping the
+-- summon being dragged, or acting with the selected piece), and the mana they have.
+function board:getHoverManaCost()
+    local x, y = self.hoverTile[1], self.hoverTile[2]
+    if not (x and y and self:isWithinBounds(x, y)) then return end
+    local player = self.localplayer
+    if self.highlightSpawnFor then
+        if self.highlightSpawnType and self:canSummonAt(self.highlightSpawnFor, self.highlightSpawnType, x, y) then
+            return require'pieces'.getTypeData(self.highlightSpawnType).cost, self.highlightSpawnFor:getMana()
+        end
+    elseif selectedPiece and selectedPiece.player==player then
+        return selectedPiece:getActionCost(x, y), player:getMana()
+    end
+end
 
 function board:getSelectedPiece() return selectedPiece end
 
@@ -255,6 +278,17 @@ function board:draw()
     for k, v in pairs(particles) do
         love.graphics.draw(v, xPos, yPos, 0, self.scale*2, self.scale*2)
     end
+
+    local cost, mana = self:getHoverManaCost()
+    if cost and cost>0 then
+        local missing = math.max(0, cost-mana)
+        local cornerX, cornerY = gridSize*self.scale*self.hoverTile[1]+xPos, gridSize*self.scale*self.hoverTile[2]+yPos
+        love.graphics.setColor(1, 1, 1, 1)
+        for i=1, cost do -- from the rightmost
+            love.graphics.draw(spriteAtlas, i<=missing and manaMissingQuad or manaCostQuad,
+                cornerX-manaCostSpacing*self.scale*(i-1), cornerY, 0, self.scale, self.scale, manaCostOriginX, manaCostOriginY)
+        end
+    end
 end
 
 local mousePressedX, mousePressedY
@@ -284,8 +318,9 @@ function board:setHighlightDamageSpawnFor(Ptype, targetX, targetY)
     hoverAttackHighlight = piece.getSpawnSplash and {piece:getSpawnSplash(targetX, targetY)}
 end
 
-function board:setHighlightSpawnFor(player)
+function board:setHighlightSpawnFor(player, pType)
     self.highlightSpawnFor = player
+    self.highlightSpawnType = player and pType
 end
 
 function board:isWithinBounds(x, y)
